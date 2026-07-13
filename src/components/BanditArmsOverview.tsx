@@ -817,13 +817,13 @@ function BanditHowItWorksContent() {
               {/* Lifecycle row: Proposer → Realizer → Gathering → Evaluator */}
               <rect x="8" y="24" width="150" height="54" rx="8" fill="rgba(100,180,255,0.1)" stroke="#64b4ff" strokeWidth="1.5" />
               <text x="83" y="45" textAnchor="middle" fill="#64b4ff" fontSize="11" fontWeight="600">Proposer</text>
-              <text x="83" y="60" textAnchor="middle" fill="#8090a0" fontSize="8.5">learning scorer picks a</text>
+              <text x="83" y="60" textAnchor="middle" fill="#8090a0" fontSize="8.5">scorer ranks untried</text>
               <text x="83" y="71" textAnchor="middle" fill="#8090a0" fontSize="8.5">market × DC × protocol</text>
 
               <rect x="190" y="24" width="150" height="54" rx="8" fill="rgba(100,180,255,0.1)" stroke="#64b4ff" strokeWidth="1.5" />
               <text x="265" y="45" textAnchor="middle" fill="#64b4ff" fontSize="11" fontWeight="600">Realizer</text>
               <text x="265" y="60" textAnchor="middle" fill="#8090a0" fontSize="8.5">spins up challenger track</text>
-              <text x="265" y="71" textAnchor="middle" fill="#8090a0" fontSize="8.5">1 VPS, disjoint ≤2% slice</text>
+              <text x="265" y="71" textAnchor="middle" fill="#8090a0" fontSize="8.5">1 VPS, disjoint ≤ 2% slice</text>
 
               <rect x="372" y="24" width="150" height="54" rx="8" fill="rgba(0,229,200,0.1)" stroke="#00e5c8" strokeWidth="1.5" />
               <text x="447" y="45" textAnchor="middle" fill="#00e5c8" fontSize="11" fontWeight="600">Gathering ≥ 24h</text>
@@ -833,7 +833,7 @@ function BanditHowItWorksContent() {
               <rect x="554" y="24" width="158" height="54" rx="8" fill="rgba(255,180,50,0.1)" stroke="#ffb432" strokeWidth="1.5" />
               <text x="633" y="45" textAnchor="middle" fill="#ffb432" fontSize="11" fontWeight="600">Evaluator</text>
               <text x="633" y="60" textAnchor="middle" fill="#8090a0" fontSize="8.5">goodput + success-rate SPRT</text>
-              <text x="633" y="71" textAnchor="middle" fill="#8090a0" fontSize="8.5">on target market</text>
+              <text x="633" y="71" textAnchor="middle" fill="#8090a0" fontSize="8.5">on the target market</text>
 
               <line x1="158" y1="51" x2="186" y2="51" stroke="#64b4ff" strokeWidth="1.5" markerEnd="url(#arrow-exp)" />
               <line x1="340" y1="51" x2="368" y2="51" stroke="#64b4ff" strokeWidth="1.5" markerEnd="url(#arrow-exp)" />
@@ -869,7 +869,7 @@ function BanditHowItWorksContent() {
               <line x1="430" y1="210" x2="360" y2="245" stroke="#50c878" strokeWidth="1.5" markerEnd="url(#arrow-exp-green)" />
               <text x="360" y="232" textAnchor="middle" fill="#50c878" fontSize="8.5">win</text>
               <line x1="492" y1="210" x2="528" y2="245" stroke="#ff5050" strokeWidth="1.5" markerEnd="url(#arrow-exp-red)" />
-              <text x="540" y="232" textAnchor="middle" fill="#ff5050" fontSize="8.5">loss / SPRT / starve / 5d cap</text>
+              <text x="540" y="232" textAnchor="middle" fill="#ff5050" fontSize="8.5">goodput/SPRT loss, starve, 5d cap</text>
 
               {/* Promote feeds back into the catalog */}
               <line x1="250" y1="276" x2="83" y2="276" stroke="#50c878" strokeWidth="1" strokeDasharray="4,3" />
@@ -879,7 +879,7 @@ function BanditHowItWorksContent() {
 
             <p style={{ marginTop: "0.35rem" }}>A <strong>challenger</strong> is one new proxy configuration — a single target market × datacenter × protocol — provisioned as a tiny track on one VPS. It's measured against the <strong>control</strong>: the established track free users in that market already get. Concurrent challengers in the same market are pinned to <strong>disjoint device-hash slices</strong> (≤ 2% each) so they don't cannibalize each other's samples. Experiments only run in <strong>censored markets</strong> (default CN, RU, IR, MM), where a better config matters most.</p>
 
-            <p style={{ marginTop: "0.35rem" }}>Three background workers drive the loop. The <strong>proposer</strong> scores untried combinations with a <strong>learning value model</strong> — protocol-family and provider effects, novelty, and cross-market seeding of proven winners, all recency-decayed — and launches a budgeted batch by ε-greedy selection (defaults: 20 concurrent, 4 per market, 4 per batch). A losing combo goes on a <strong>cooldown</strong> (default 30 days) rather than being blacklisted forever, so it can be re-explored as censorship shifts. The <strong>realizer</strong> turns a proposal into a live challenger track — one VPS on a disjoint ≤ 2% slice. The <strong>evaluator</strong>, after at least <strong>24 hours</strong> of gathering, compares challenger vs control on the <strong>target market</strong> across two co-primary axes: median download <strong>goodput</strong> and connect/<strong>success rate</strong>.</p>
+            <p style={{ marginTop: "0.35rem" }}>Three background workers drive the loop. The <strong>proposer</strong> scores untried combinations with a <strong>learning value model</strong> — protocol-family and provider effects, novelty, and cross-market seeding of proven winners, all recency-decayed — and ranks candidates by ε-greedy selection for a budgeted batch (defaults: 20 concurrent, 4 per market, 4 per batch). A losing combo goes on a <strong>cooldown</strong> (default 30 days) rather than being blacklisted forever, so it can be re-explored as censorship shifts. The <strong>realizer</strong> turns a proposal into a live challenger track — one VPS on a disjoint ≤ 2% slice. The <strong>evaluator</strong>, after at least <strong>24 hours</strong> of gathering, compares challenger vs control on the <strong>target market</strong> across two co-primary axes: median download <strong>goodput</strong> and connect/<strong>success rate</strong>.</p>
 
             <p style={{ marginTop: "0.35rem" }}>The verdict is <strong>co-primary</strong>. On <strong>goodput</strong>, a challenger is promoted when it beats the control by an <strong>adaptive margin</strong> — starting near <strong>40%</strong> at the sample floor and relaxing toward a <strong>15%</strong> floor as sessions accrue — judged on the target market's own stratum (other markets act only as a no-regression guardrail). Independently, a Wald <strong>sequential test (SPRT)</strong> on the target-market <strong>success rate</strong> promotes a challenger that is <em>materially more reachable</em> even when goodput is inconclusive — and retires one that is materially less reachable — often deciding in hours rather than days. A challenger is also retired if it <strong>starves</strong> (too few samples by 48h; zero samples aborts and frees the combo immediately) or stays inconclusive past the <strong>5-day</strong> gathering cap; anything in between holds for more data.</p>
 
