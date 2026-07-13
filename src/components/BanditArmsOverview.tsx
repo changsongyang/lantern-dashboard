@@ -817,13 +817,13 @@ function BanditHowItWorksContent() {
               {/* Lifecycle row: Proposer → Realizer → Gathering → Evaluator */}
               <rect x="8" y="24" width="150" height="54" rx="8" fill="rgba(100,180,255,0.1)" stroke="#64b4ff" strokeWidth="1.5" />
               <text x="83" y="45" textAnchor="middle" fill="#64b4ff" fontSize="11" fontWeight="600">Proposer</text>
-              <text x="83" y="60" textAnchor="middle" fill="#8090a0" fontSize="8.5">untried region × DC ×</text>
-              <text x="83" y="71" textAnchor="middle" fill="#8090a0" fontSize="8.5">protocol (censored only)</text>
+              <text x="83" y="60" textAnchor="middle" fill="#8090a0" fontSize="8.5">learning scorer picks a</text>
+              <text x="83" y="71" textAnchor="middle" fill="#8090a0" fontSize="8.5">market × DC × protocol</text>
 
               <rect x="190" y="24" width="150" height="54" rx="8" fill="rgba(100,180,255,0.1)" stroke="#64b4ff" strokeWidth="1.5" />
               <text x="265" y="45" textAnchor="middle" fill="#64b4ff" fontSize="11" fontWeight="600">Realizer</text>
               <text x="265" y="60" textAnchor="middle" fill="#8090a0" fontSize="8.5">spins up challenger track</text>
-              <text x="265" y="71" textAnchor="middle" fill="#8090a0" fontSize="8.5">1 VPS, ≤2% of free users</text>
+              <text x="265" y="71" textAnchor="middle" fill="#8090a0" fontSize="8.5">1 VPS, disjoint ≤2% slice</text>
 
               <rect x="372" y="24" width="150" height="54" rx="8" fill="rgba(0,229,200,0.1)" stroke="#00e5c8" strokeWidth="1.5" />
               <text x="447" y="45" textAnchor="middle" fill="#00e5c8" fontSize="11" fontWeight="600">Gathering ≥ 24h</text>
@@ -832,8 +832,8 @@ function BanditHowItWorksContent() {
 
               <rect x="554" y="24" width="158" height="54" rx="8" fill="rgba(255,180,50,0.1)" stroke="#ffb432" strokeWidth="1.5" />
               <text x="633" y="45" textAnchor="middle" fill="#ffb432" fontSize="11" fontWeight="600">Evaluator</text>
-              <text x="633" y="60" textAnchor="middle" fill="#8090a0" fontSize="8.5">compares median goodput</text>
-              <text x="633" y="71" textAnchor="middle" fill="#8090a0" fontSize="8.5">per-country strata</text>
+              <text x="633" y="60" textAnchor="middle" fill="#8090a0" fontSize="8.5">goodput + success-rate SPRT</text>
+              <text x="633" y="71" textAnchor="middle" fill="#8090a0" fontSize="8.5">on target market</text>
 
               <line x1="158" y1="51" x2="186" y2="51" stroke="#64b4ff" strokeWidth="1.5" markerEnd="url(#arrow-exp)" />
               <line x1="340" y1="51" x2="368" y2="51" stroke="#64b4ff" strokeWidth="1.5" markerEnd="url(#arrow-exp)" />
@@ -841,10 +841,10 @@ function BanditHowItWorksContent() {
 
               {/* Decision rule */}
               <rect x="372" y="148" width="170" height="62" rx="8" fill="rgba(255,180,50,0.06)" stroke="#ffb432" strokeWidth="1" strokeDasharray="4,3" />
-              <text x="457" y="168" textAnchor="middle" fill="#ffb432" fontSize="10.5" fontWeight="600">Big-win decision</text>
-              <text x="457" y="183" textAnchor="middle" fill="#8090a0" fontSize="8.5">challenger ≥ 40% faster</text>
-              <text x="457" y="195" textAnchor="middle" fill="#8090a0" fontSize="8.5">in a majority of ≥ 6</text>
-              <text x="457" y="206" textAnchor="middle" fill="#8090a0" fontSize="8.5">qualifying countries</text>
+              <text x="457" y="168" textAnchor="middle" fill="#ffb432" fontSize="10.5" fontWeight="600">Co-primary decision</text>
+              <text x="457" y="183" textAnchor="middle" fill="#8090a0" fontSize="8.5">goodput: adaptive 40%→15%</text>
+              <text x="457" y="195" textAnchor="middle" fill="#8090a0" fontSize="8.5">OR success-rate SPRT</text>
+              <text x="457" y="206" textAnchor="middle" fill="#8090a0" fontSize="8.5">on the target market</text>
               <line x1="620" y1="78" x2="500" y2="145" stroke="#ffb432" strokeWidth="1.5" markerEnd="url(#arrow-exp)" />
 
               {/* Guardrails veto */}
@@ -869,7 +869,7 @@ function BanditHowItWorksContent() {
               <line x1="430" y1="210" x2="360" y2="245" stroke="#50c878" strokeWidth="1.5" markerEnd="url(#arrow-exp-green)" />
               <text x="360" y="232" textAnchor="middle" fill="#50c878" fontSize="8.5">win</text>
               <line x1="492" y1="210" x2="528" y2="245" stroke="#ff5050" strokeWidth="1.5" markerEnd="url(#arrow-exp-red)" />
-              <text x="540" y="232" textAnchor="middle" fill="#ff5050" fontSize="8.5">loss / 14d timeout</text>
+              <text x="540" y="232" textAnchor="middle" fill="#ff5050" fontSize="8.5">loss / SPRT / starve / 5d cap</text>
 
               {/* Promote feeds back into the catalog */}
               <line x1="250" y1="276" x2="83" y2="276" stroke="#50c878" strokeWidth="1" strokeDasharray="4,3" />
@@ -877,15 +877,15 @@ function BanditHowItWorksContent() {
               <text x="150" y="270" textAnchor="middle" fill="#50c878" fontSize="8">promoted track becomes a normal arm</text>
             </svg>
 
-            <p style={{ marginTop: "0.35rem" }}>A <strong>challenger</strong> is one new proxy configuration — a single region × datacenter × protocol — provisioned as a tiny track. It's measured against the <strong>control</strong>: the established track free users in that region already get. Experiments only run in <strong>censored markets</strong> (default CN, RU, IR, MM), where a better config matters most.</p>
+            <p style={{ marginTop: "0.35rem" }}>A <strong>challenger</strong> is one new proxy configuration — a single target market × datacenter × protocol — provisioned as a tiny track on one VPS. It's measured against the <strong>control</strong>: the established track free users in that market already get. Concurrent challengers in the same market are pinned to <strong>disjoint device-hash slices</strong> (≤ 2% each) so they don't cannibalize each other's samples. Experiments only run in <strong>censored markets</strong> (default CN, RU, IR, MM), where a better config matters most.</p>
 
-            <p style={{ marginTop: "0.35rem" }}>Three background workers drive the loop. The <strong>proposer</strong> enumerates untried combinations and launches a budgeted batch (capped by max-concurrent and per-region limits). The <strong>realizer</strong> turns a proposal into a live challenger track — one VPS serving at most ~2% of free clients, so a bad config can't hurt many people. The <strong>evaluator</strong>, after at least <strong>24 hours</strong> of gathering, compares the median download <strong>goodput</strong> of challenger vs control within each client country.</p>
+            <p style={{ marginTop: "0.35rem" }}>Three background workers drive the loop. The <strong>proposer</strong> scores untried combinations with a <strong>learning value model</strong> — protocol-family and provider effects, novelty, and cross-market seeding of proven winners, all recency-decayed — and launches a budgeted batch by ε-greedy selection (defaults: 20 concurrent, 4 per market, 4 per batch). A losing combo goes on a <strong>cooldown</strong> (default 30 days) rather than being blacklisted forever, so it can be re-explored as censorship shifts. The <strong>realizer</strong> turns a proposal into a live challenger track — one VPS on a disjoint ≤ 2% slice. The <strong>evaluator</strong>, after at least <strong>24 hours</strong> of gathering, compares challenger vs control on the <strong>target market</strong> across two co-primary axes: median download <strong>goodput</strong> and connect/<strong>success rate</strong>.</p>
 
-            <p style={{ marginTop: "0.35rem" }}>The decision rule optimizes for <strong>big wins</strong>: a challenger is promoted only if it beats the control by <strong>≥ 40%</strong> in a majority of qualifying country strata (each needs ≥ 6 strata with ≥ 50 sessions per arm). A symmetric loss — or an inconclusive result after <strong>14 days</strong> — retires it; anything in between holds for more data.</p>
+            <p style={{ marginTop: "0.35rem" }}>The verdict is <strong>co-primary</strong>. On <strong>goodput</strong>, a challenger is promoted when it beats the control by an <strong>adaptive margin</strong> — starting near <strong>40%</strong> at the sample floor and relaxing toward a <strong>15%</strong> floor as sessions accrue — judged on the target market's own stratum (other markets act only as a no-regression guardrail). Independently, a Wald <strong>sequential test (SPRT)</strong> on the target-market <strong>success rate</strong> promotes a challenger that is <em>materially more reachable</em> even when goodput is inconclusive — and retires one that is materially less reachable — often deciding in hours rather than days. A challenger is also retired if it <strong>starves</strong> (too few samples by 48h; zero samples aborts and frees the combo immediately) or stays inconclusive past the <strong>5-day</strong> gathering cap; anything in between holds for more data.</p>
 
             <p style={{ marginTop: "0.35rem" }}>Two <strong>guardrails</strong> can veto a goodput win: a challenger whose routes are getting <strong>blocked</strong> (≥ 50%) or whose connect/<strong>success rate</strong> trails the control by more than 10 percentage points is downgraded to hold — a fast-but-flaky or already-detected config never wins on speed alone. A promotion then <strong>ramps in stages</strong> (10% → 50% → 100% of free users), re-checking the blocking guardrail at each step and rolling back if it regresses. Once at 100%, the challenger becomes an ordinary track in the catalog and the bandit takes over.</p>
 
-            <p style={{ marginTop: "0.35rem", color: "#667080" }}>Every stage is gated by settings and starts disabled. With <em>auto-act</em> off the evaluator only logs the recommendation it would make (recommend-only); turning it on lets it actually promote and retire. Watch the live pipeline, per-experiment stats, and tune these knobs on the <strong>Experiments</strong> tab.</p>
+            <p style={{ marginTop: "0.35rem", color: "#667080" }}>Every stage is gated by settings and starts conservative. The learning <strong>proposer runs in shadow</strong> by default — it logs the pick it <em>would</em> make while launches still follow enumeration order — until <code style={{ background: "rgba(255,255,255,0.06)", padding: "1px 4px", borderRadius: "3px", fontSize: "0.65rem" }}>experiment_scorer_enabled</code> is turned on. And with <em>auto-act</em> off the evaluator only logs the recommendation it would make (recommend-only); turning it on lets it actually promote and retire. Watch the live pipeline, per-experiment stats, and tune these knobs on the <strong>Experiments</strong> tab.</p>
           </div>
         </div>
   );
