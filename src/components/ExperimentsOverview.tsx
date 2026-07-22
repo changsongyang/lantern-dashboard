@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   Bar,
   BarChart,
@@ -109,27 +109,47 @@ function StatusBadge({ status }: { status: string }) {
 
 // ── Lifecycle pipeline strip ──
 
-function PipelineStrip({ pipeline }: { pipeline: ExperimentPipeline | null }) {
+// PipelineStrip doubles as the table's status filter: each stage card is a toggle
+// button. A stage that's toggled off (dimmed + struck through) is hidden from the
+// experiments list below. Counts always reflect the full pipeline, not the filter.
+function PipelineStrip({ pipeline, hiddenStatuses, onToggle }: {
+  pipeline: ExperimentPipeline | null;
+  hiddenStatuses: Set<string>;
+  onToggle: (status: string) => void;
+}) {
   if (!pipeline) return null;
   return (
     <div style={card}>
-      <div style={sectionLabel}>Lifecycle pipeline</div>
+      <div style={{ ...sectionLabel, display: "flex", justifyContent: "space-between", gap: "1rem" }}>
+        <span>Lifecycle pipeline</span>
+        <span style={{ textTransform: "none", letterSpacing: 0 }}>click a stage to show / hide it in the list</span>
+      </div>
       <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
         {pipeline.order.map((status) => {
           const count = pipeline.counts[status] ?? 0;
           const color = STATUS_COLORS[status] || "#8890a0";
-          const active = count > 0;
+          const hasCount = count > 0;
+          const on = !hiddenStatuses.has(status);
           return (
-            <div key={status} style={{
-              flex: "1 1 6rem", minWidth: "5.5rem",
-              borderRadius: "var(--radius-sm)",
-              border: `1px solid ${active ? `${color}40` : "#ffffff0d"}`,
-              background: active ? `${color}12` : "#ffffff05",
-              padding: "0.5rem 0.6rem",
-            }}>
-              <div style={{ ...mono, fontSize: "1.3rem", fontWeight: 600, color: active ? color : "#5a6472" }}>{count}</div>
-              <div style={{ ...mono, fontSize: "0.5rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)" }}>{status}</div>
-            </div>
+            <button
+              type="button"
+              key={status}
+              onClick={() => onToggle(status)}
+              aria-pressed={on}
+              title={on ? `Hide ${status} from the list` : `Show ${status} in the list`}
+              style={{
+                flex: "1 1 6rem", minWidth: "5.5rem", textAlign: "left",
+                appearance: "none", cursor: "pointer",
+                borderRadius: "var(--radius-sm)",
+                border: `1px solid ${on && hasCount ? `${color}40` : "#ffffff0d"}`,
+                background: on && hasCount ? `${color}12` : "#ffffff05",
+                padding: "0.5rem 0.6rem",
+                opacity: on ? 1 : 0.45,
+              }}
+            >
+              <div style={{ ...mono, fontSize: "1.3rem", fontWeight: 600, color: on && hasCount ? color : "#5a6472" }}>{count}</div>
+              <div style={{ ...mono, fontSize: "0.5rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", textDecoration: on ? "none" : "line-through" }}>{status}</div>
+            </button>
           );
         })}
       </div>
@@ -481,7 +501,7 @@ function ExperimentsTable({ experiments, selectedId, onSelect, onChanged }: {
   experiments: ExperimentSummary[]; selectedId: number | null; onSelect: (id: number | null) => void; onChanged: () => void;
 }) {
   if (experiments.length === 0) {
-    return <div style={{ ...mono, color: "var(--text-muted)", padding: "1rem" }}>No experiments yet.</div>;
+    return <div style={{ ...mono, color: "var(--text-muted)", padding: "1rem" }}>No experiments in the selected stages.</div>;
   }
   const headerStyle: CSSProperties = {
     display: "grid", gridTemplateColumns: colTemplate, gap: "0.5rem",
@@ -590,16 +610,20 @@ function PromotedComparison({ enabled }: { enabled: boolean }) {
   const protocols = useMemo(() => [...new Set(allPoints.map((p) => p.protocolName).filter(Boolean))].sort(), [allPoints]);
   const providers = useMemo(() => [...new Set(allPoints.map((p) => p.providerName).filter(Boolean))].sort(), [allPoints]);
 
-  // A point is plottable only when both arms have live samples in the window;
-  // otherwise its goodput is a meaningless 0 that would pile on the origin.
-  const filtered = useMemo(() => allPoints.filter((p) =>
-    p.promotedSamples > 0 && p.originalSamples > 0 &&
+  const matchesFilters = useCallback((p: PromotedComparisonPoint) =>
     (!country || p.targetCountry === country) &&
     (!protocol || p.protocolName === protocol) &&
     (!provider || p.providerName === provider),
-  ), [allPoints, country, protocol, provider]);
+  [country, protocol, provider]);
 
-  const hidden = allPoints.length - allPoints.filter((p) => p.promotedSamples > 0 && p.originalSamples > 0).length;
+  // A point is plottable only when both arms have live samples in the window;
+  // otherwise its goodput is a meaningless 0 that would pile on the origin.
+  const hasSamples = (p: PromotedComparisonPoint) => p.promotedSamples > 0 && p.originalSamples > 0;
+  const filtered = useMemo(() => allPoints.filter((p) => hasSamples(p) && matchesFilters(p)), [allPoints, matchesFilters]);
+
+  // Hidden = points matching the active filters but lacking live samples, so the
+  // "N hidden" note stays consistent with the filtered track count above it.
+  const hidden = useMemo(() => allPoints.filter((p) => matchesFilters(p) && !hasSamples(p)).length, [allPoints, matchesFilters]);
 
   const wins = filtered.filter((p) => p.promotedGoodput >= p.originalGoodput);
   const losses = filtered.filter((p) => p.promotedGoodput < p.originalGoodput);
@@ -707,8 +731,24 @@ function PromotedComparison({ enabled }: { enabled: boolean }) {
 export default function ExperimentsOverview({ enabled }: { enabled: boolean }) {
   const [view, setView] = useState<"experiments" | "settings">("experiments");
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  // Status filter driven by the pipeline strip. Retired experiments are hidden by
+  // default — they're the bulk of terminal history and rarely what you're after.
+  const [hiddenStatuses, setHiddenStatuses] = useState<Set<string>>(() => new Set(["retired"]));
   const { experiments, pipeline, isLoading, hasLoaded, error, refresh } = useExperiments(enabled);
   const settings = useExperimentSettings(enabled);
+
+  const toggleStatus = useCallback((status: string) => {
+    setHiddenStatuses((prev) => {
+      const next = new Set(prev);
+      if (next.has(status)) next.delete(status); else next.add(status);
+      return next;
+    });
+  }, []);
+
+  const visibleExperiments = useMemo(
+    () => experiments.filter((e) => !hiddenStatuses.has(e.status)),
+    [experiments, hiddenStatuses],
+  );
 
   // Surface a banner when the core automation workers are paused.
   const automationOff = useMemo(() => {
@@ -746,12 +786,12 @@ export default function ExperimentsOverview({ enabled }: { enabled: boolean }) {
           {error && (
             <div style={{ ...mono, fontSize: "0.65rem", color: "var(--accent-danger, #ff4060)", background: "#ff406012", border: "1px solid #ff406030", borderRadius: "var(--radius-sm)", padding: "0.5rem 0.75rem" }}>{error}</div>
           )}
-          <PipelineStrip pipeline={pipeline} />
+          <PipelineStrip pipeline={pipeline} hiddenStatuses={hiddenStatuses} onToggle={toggleStatus} />
           <PromotedComparison enabled={enabled && view === "experiments"} />
           {isLoading && !hasLoaded ? (
             <div style={{ ...mono, color: "var(--text-muted)", padding: "1rem" }}>Loading experiments…</div>
           ) : (
-            <ExperimentsTable experiments={experiments} selectedId={selectedId} onSelect={setSelectedId} onChanged={refresh} />
+            <ExperimentsTable experiments={visibleExperiments} selectedId={selectedId} onSelect={setSelectedId} onChanged={refresh} />
           )}
         </>
       )}
