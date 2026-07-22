@@ -586,8 +586,10 @@ function mergeTrafficRows(
 
 // trackCountryKey keys the per-(track, market) series map; both arms of a
 // promotion are read at the experiment's target market, the stratum they share.
+// The "|" separator is safe: track names are [a-z0-9-] and countries are ISO
+// alpha-2, so neither contains it.
 function trackCountryKey(track: string, country: string): string {
-  return `${track} ${country}`;
+  return `${track}|${country}`;
 }
 
 // PromotionTrafficCard is one promotion's traffic chart: the promoted track's
@@ -639,15 +641,17 @@ function PromotionTrafficCard({ point, seriesByTrackCountry, startMs, endMs, log
               allowDataOverflow={logScale}
               tickFormatter={formatBytesPerSec} tick={{ fontSize: 9, fill: "#8890a0" }} width={58} />
             <Tooltip
-              formatter={(v, name) => [formatBytesPerSec(Number(v)), name === "promoted" ? "promoted" : "original"]}
+              formatter={(v, name) => [Number.isFinite(Number(v)) ? formatBytesPerSec(Number(v)) : "—", name === "promoted" ? "promoted" : "original"]}
               labelFormatter={(ts) => new Date(Number(ts)).toLocaleString()}
               contentStyle={{ background: "var(--bg-secondary)", border: "1px solid #ffffff14", fontSize: 11 }} />
             {showMarker && (
               <ReferenceLine x={promotedMs} stroke="#c090e0" strokeDasharray="4 3"
                 label={{ value: "promoted", position: "insideTopRight", fontSize: 9, fill: "#c090e0" }} />
             )}
-            <Line type="monotone" dataKey="promoted" name="promoted" stroke={CHALLENGER_COLOR} dot={false} strokeWidth={2} isAnimationActive={false} connectNulls />
-            <Line type="monotone" dataKey="original" name="original" stroke={CONTROL_COLOR} dot={false} strokeWidth={2} isAnimationActive={false} connectNulls />
+            {/* No connectNulls: a track dropping to zero (a gap on the log axis)
+                must read as a break, not a bridged line implying phantom traffic. */}
+            <Line type="monotone" dataKey="promoted" name="promoted" stroke={CHALLENGER_COLOR} dot={false} strokeWidth={2} isAnimationActive={false} />
+            <Line type="monotone" dataKey="original" name="original" stroke={CONTROL_COLOR} dot={false} strokeWidth={2} isAnimationActive={false} />
           </LineChart>
         </ResponsiveContainer>
       )}
@@ -709,7 +713,14 @@ function PromotedTraffic({ enabled }: { enabled: boolean }) {
   const [trafficError, setTrafficError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isAuthenticated || byMarket.size === 0 || !(endMs > startMs)) { setSeriesByTrackCountry(new Map()); return; }
+    if (!isAuthenticated || byMarket.size === 0 || !(endMs > startMs)) {
+      // Reset everything, including the loading/error flags, so a filter change
+      // that empties the market set can't leave the UI stuck on "loading traffic".
+      setSeriesByTrackCountry(new Map());
+      setTrafficLoading(false);
+      setTrafficError(null);
+      return;
+    }
     let cancelled = false;
     const run = async () => {
       setTrafficLoading(true);
@@ -816,7 +827,7 @@ function PromotedTraffic({ enabled }: { enabled: boolean }) {
             ))}
           </div>
           <div style={{ ...mono, fontSize: "0.55rem", color: "var(--text-muted)", marginTop: "0.5rem" }}>
-            {promotions.length} promoted {promotions.length === 1 ? "track" : "tracks"}{trafficLoading ? " · loading traffic…" : ""}
+            {promotions.length} {promotions.length === 1 ? "promotion" : "promotions"}{trafficLoading ? " · loading traffic…" : ""}
           </div>
         </>
       )}
