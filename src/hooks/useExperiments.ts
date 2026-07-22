@@ -3,10 +3,12 @@ import {
   fetchExperiments,
   fetchExperimentDetail,
   fetchExperimentSettings,
+  fetchPromotedComparison,
   type ExperimentSummary,
   type ExperimentPipeline,
   type ExperimentDetail,
   type ExperimentSettingsResponse,
+  type PromotedComparisonResponse,
 } from "../api/client";
 import { useAuth } from "./useAuth";
 
@@ -99,6 +101,38 @@ export function useExperimentDetail(id: number | null) {
   }, [id]);
 
   return { detail, isLoading, error };
+}
+
+// usePromotedComparison loads the promoted-vs-original goodput scatter for a
+// now-relative window (hours). Re-fetches when the tab activates or the window
+// changes. The single request measures every promoted track server-side, so no
+// polling — the operator re-picks a window to refresh.
+export function usePromotedComparison(enabled: boolean, hours: number) {
+  const { isAuthenticated } = useAuth();
+  const [data, setData] = useState<PromotedComparisonResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!enabled || !isAuthenticated) return;
+    let cancelled = false;
+    const run = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const d = await fetchPromotedComparison(hours);
+        if (!cancelled) setData(d);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load comparison");
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [enabled, isAuthenticated, hours]);
+
+  return { data, isLoading, error };
 }
 
 // useExperimentSettings loads the knob registry + read-only constants once, with a

@@ -6,10 +6,14 @@ import {
   Legend,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
+  Scatter,
+  ScatterChart,
   Tooltip,
   XAxis,
   YAxis,
+  ZAxis,
 } from "recharts";
 import {
   abortExperiment,
@@ -20,13 +24,26 @@ import {
   type ExperimentStratum,
   type ExperimentSummary,
   type ExperimentPipeline,
+  type PromotedComparisonPoint,
 } from "../api/client";
-import { useExperiments, useExperimentDetail, useExperimentSettings } from "../hooks/useExperiments";
+import { useExperiments, useExperimentDetail, useExperimentSettings, usePromotedComparison } from "../hooks/useExperiments";
 import { useAuth } from "../hooks/useAuth";
 import ExperimentSettings from "./ExperimentSettings";
 
 const CHALLENGER_COLOR = "#00e5c8";
 const CONTROL_COLOR = "#f0a030";
+// Promoted-vs-original scatter: a promotion still beating its original is a win
+// (green, matching the "promoted" lifecycle color), still trailing is a loss.
+const WIN_COLOR = "#20e070";
+const LOSS_COLOR = "#ff4060";
+
+// Selectable now-relative windows for the promoted-vs-original scatter.
+const COMPARISON_WINDOWS: Array<{ label: string; hours: number }> = [
+  { label: "6h", hours: 6 },
+  { label: "24h", hours: 24 },
+  { label: "7d", hours: 168 },
+  { label: "30d", hours: 720 },
+];
 
 // Lifecycle status → display color, matching the dashboard's accent palette.
 const STATUS_COLORS: Record<string, string> = {
@@ -515,6 +532,175 @@ function ExperimentsTable({ experiments, selectedId, onSelect, onChanged }: {
   );
 }
 
+// ── Promoted vs original scatter ──
+
+const filterLabel: CSSProperties = {
+  ...mono, fontSize: "0.5rem", textTransform: "uppercase", letterSpacing: "0.05em",
+  color: "var(--text-muted)", marginBottom: "0.2rem",
+};
+
+const filterSelect: CSSProperties = {
+  ...mono, fontSize: "0.65rem", color: "var(--text-primary)",
+  background: "#ffffff08", border: "1px solid #ffffff10",
+  borderRadius: "var(--radius-sm)", padding: "0.35rem 0.55rem",
+};
+
+function chip(active: boolean): CSSProperties {
+  return {
+    ...mono, fontSize: "0.6rem", padding: "0.3rem 0.7rem", borderRadius: "var(--radius-sm)",
+    cursor: "pointer", userSelect: "none",
+    background: active ? "var(--accent-primary-dim)" : "#ffffff08",
+    color: active ? "var(--accent-primary)" : "var(--text-muted)",
+    border: `1px solid ${active ? "#00e5c830" : "#ffffff10"}`,
+  };
+}
+
+function ComparisonTooltip({ active, payload }: {
+  active?: boolean;
+  payload?: Array<{ payload: PromotedComparisonPoint }>;
+}) {
+  if (!active || !payload || payload.length === 0) return null;
+  const p = payload[0].payload;
+  const delta = p.originalGoodput > 0 ? ((p.promotedGoodput - p.originalGoodput) / p.originalGoodput) * 100 : 0;
+  const deltaColor = delta >= 0 ? WIN_COLOR : LOSS_COLOR;
+  return (
+    <div style={{ ...mono, fontSize: "0.62rem", background: "var(--bg-secondary)", border: "1px solid #ffffff14", borderRadius: "var(--radius-sm)", padding: "0.5rem 0.6rem", lineHeight: 1.5 }}>
+      <div style={{ color: "var(--text-muted)" }}>#{p.experimentId} · {p.targetCountry} · {p.protocolName || "—"}{p.providerName ? ` · ${p.providerName}` : ""}</div>
+      <div><span style={{ color: WIN_COLOR }}>{p.promotedTrackName}</span> <span style={{ color: "var(--text-muted)" }}>(promoted)</span></div>
+      <div><span style={{ color: CONTROL_COLOR }}>{p.originalTrackName}</span> <span style={{ color: "var(--text-muted)" }}>(original)</span></div>
+      <div style={{ marginTop: "0.25rem" }}>promoted: {formatBytesPerSec(p.promotedGoodput)} <span style={{ color: "var(--text-muted)" }}>({p.promotedSamples} sess)</span></div>
+      <div>original: {formatBytesPerSec(p.originalGoodput)} <span style={{ color: "var(--text-muted)" }}>({p.originalSamples} sess)</span></div>
+      <div style={{ color: deltaColor, marginTop: "0.15rem" }}>{delta >= 0 ? "+" : ""}{delta.toFixed(0)}% vs original</div>
+    </div>
+  );
+}
+
+function PromotedComparison({ enabled }: { enabled: boolean }) {
+  const [hours, setHours] = useState(168);
+  const [country, setCountry] = useState("");
+  const [protocol, setProtocol] = useState("");
+  const [provider, setProvider] = useState("");
+  const { data, isLoading, error } = usePromotedComparison(enabled, hours);
+
+  const allPoints = useMemo(() => data?.points ?? [], [data]);
+
+  // Filter option lists come from all points (before country/protocol/provider
+  // filtering) so choosing one filter never empties the others' dropdowns.
+  const countries = useMemo(() => [...new Set(allPoints.map((p) => p.targetCountry).filter(Boolean))].sort(), [allPoints]);
+  const protocols = useMemo(() => [...new Set(allPoints.map((p) => p.protocolName).filter(Boolean))].sort(), [allPoints]);
+  const providers = useMemo(() => [...new Set(allPoints.map((p) => p.providerName).filter(Boolean))].sort(), [allPoints]);
+
+  // A point is plottable only when both arms have live samples in the window;
+  // otherwise its goodput is a meaningless 0 that would pile on the origin.
+  const filtered = useMemo(() => allPoints.filter((p) =>
+    p.promotedSamples > 0 && p.originalSamples > 0 &&
+    (!country || p.targetCountry === country) &&
+    (!protocol || p.protocolName === protocol) &&
+    (!provider || p.providerName === provider),
+  ), [allPoints, country, protocol, provider]);
+
+  const hidden = allPoints.length - allPoints.filter((p) => p.promotedSamples > 0 && p.originalSamples > 0).length;
+
+  const wins = filtered.filter((p) => p.promotedGoodput >= p.originalGoodput);
+  const losses = filtered.filter((p) => p.promotedGoodput < p.originalGoodput);
+  const axisMax = useMemo(() => {
+    const m = Math.max(0, ...filtered.map((p) => Math.max(p.promotedGoodput, p.originalGoodput)));
+    return m > 0 ? m * 1.08 : 1; // headroom so parity line + points aren't clipped
+  }, [filtered]);
+
+  const hasFilters = Boolean(country || protocol || provider);
+
+  return (
+    <div style={card}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", flexWrap: "wrap", marginBottom: "0.6rem" }}>
+        <div>
+          <div style={{ ...sectionLabel, marginBottom: "0.15rem" }}>Promoted vs original — median goodput</div>
+          <div style={{ ...mono, fontSize: "0.55rem", color: "var(--text-muted)" }}>
+            Each point is a promoted track vs the original it beat, over the last {COMPARISON_WINDOWS.find((w) => w.hours === hours)?.label ?? `${hours}h`}, in its target market. Above the parity line = promotion still winning.
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: "0.3rem", alignItems: "center", flexWrap: "wrap" }}>
+          {COMPARISON_WINDOWS.map((w) => (
+            <div key={w.hours} onClick={() => setHours(w.hours)} style={chip(hours === w.hours)}>{w.label}</div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: "0.7rem", flexWrap: "wrap", alignItems: "flex-end", marginBottom: "0.6rem" }}>
+        <div style={{ display: "flex", flexDirection: "column", minWidth: 110 }}>
+          <span style={filterLabel}>Country</span>
+          <select style={filterSelect} value={country} onChange={(e) => setCountry(e.target.value)}>
+            <option value="">All</option>
+            {countries.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", minWidth: 130 }}>
+          <span style={filterLabel}>Protocol</span>
+          <select style={filterSelect} value={protocol} onChange={(e) => setProtocol(e.target.value)}>
+            <option value="">All</option>
+            {protocols.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", minWidth: 130 }}>
+          <span style={filterLabel}>Provider</span>
+          <select style={filterSelect} value={provider} onChange={(e) => setProvider(e.target.value)}>
+            <option value="">All</option>
+            {providers.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        {hasFilters && (
+          <div onClick={() => { setCountry(""); setProtocol(""); setProvider(""); }} style={chip(false)}>Clear</div>
+        )}
+      </div>
+
+      {error ? (
+        <div style={{ ...mono, fontSize: "0.65rem", color: "var(--accent-danger, #ff4060)" }}>{error}</div>
+      ) : data?.statsError ? (
+        <div style={{ ...mono, fontSize: "0.62rem", color: "#e0a060", background: "#f0a03012", border: "1px solid #f0a03030", borderRadius: "var(--radius-sm)", padding: "0.5rem 0.7rem" }}>{data.statsError}</div>
+      ) : !data || (isLoading && filtered.length === 0) ? (
+        <div style={{ ...mono, fontSize: "0.65rem", color: "var(--text-muted)" }}>Loading comparison…</div>
+      ) : filtered.length === 0 ? (
+        <div style={{ ...mono, fontSize: "0.65rem", color: "var(--text-muted)" }}>
+          No promoted tracks with live samples in this window{hasFilters ? " for the selected filters" : ""}.
+        </div>
+      ) : (
+        <>
+          <ResponsiveContainer width="100%" height={340}>
+            <ScatterChart margin={{ top: 8, right: 16, bottom: 24, left: 16 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" />
+              <XAxis
+                type="number" dataKey="originalGoodput" name="Original goodput"
+                domain={[0, axisMax]} tickFormatter={formatBytesPerSec}
+                tick={{ fontSize: 10, fill: "#8890a0" }}
+                label={{ value: "Original (control) goodput", position: "insideBottom", offset: -14, fontSize: 10, fill: "#8890a0" }}
+              />
+              <YAxis
+                type="number" dataKey="promotedGoodput" name="Promoted goodput"
+                domain={[0, axisMax]} tickFormatter={formatBytesPerSec} width={64}
+                tick={{ fontSize: 10, fill: "#8890a0" }}
+                label={{ value: "Promoted goodput", angle: -90, position: "insideLeft", fontSize: 10, fill: "#8890a0" }}
+              />
+              <ZAxis range={[60, 60]} />
+              <ReferenceLine
+                segment={[{ x: 0, y: 0 }, { x: axisMax, y: axisMax }]}
+                stroke="#8890a0" strokeDasharray="4 4" ifOverflow="hidden"
+              />
+              <Tooltip content={<ComparisonTooltip />} cursor={{ strokeDasharray: "3 3" }} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Scatter name="Promotion winning" data={wins} fill={WIN_COLOR} />
+              <Scatter name="Promotion losing" data={losses} fill={LOSS_COLOR} />
+            </ScatterChart>
+          </ResponsiveContainer>
+          <div style={{ ...mono, fontSize: "0.55rem", color: "var(--text-muted)", marginTop: "0.4rem" }}>
+            {filtered.length} promoted {filtered.length === 1 ? "track" : "tracks"} · {wins.length} winning · {losses.length} losing
+            {hidden > 0 && ` · ${hidden} hidden (no live samples in window)`}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Top-level tab content ──
 
 export default function ExperimentsOverview({ enabled }: { enabled: boolean }) {
@@ -560,6 +746,7 @@ export default function ExperimentsOverview({ enabled }: { enabled: boolean }) {
             <div style={{ ...mono, fontSize: "0.65rem", color: "var(--accent-danger, #ff4060)", background: "#ff406012", border: "1px solid #ff406030", borderRadius: "var(--radius-sm)", padding: "0.5rem 0.75rem" }}>{error}</div>
           )}
           <PipelineStrip pipeline={pipeline} />
+          <PromotedComparison enabled={enabled && view === "experiments"} />
           {isLoading && !hasLoaded ? (
             <div style={{ ...mono, color: "var(--text-muted)", padding: "1rem" }}>Loading experiments…</div>
           ) : (
