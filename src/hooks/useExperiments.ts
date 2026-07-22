@@ -119,6 +119,9 @@ export function usePromotedComparison(enabled: boolean, hours: number) {
     const run = async () => {
       setIsLoading(true);
       setError(null);
+      // Drop the prior window's data up front so the scatter shows a loading
+      // state rather than stale points under the newly-selected window's label.
+      setData(null);
       try {
         const d = await fetchPromotedComparison(hours);
         if (!cancelled) setData(d);

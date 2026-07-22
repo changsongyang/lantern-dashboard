@@ -548,7 +548,7 @@ const filterSelect: CSSProperties = {
 function chip(active: boolean): CSSProperties {
   return {
     ...mono, fontSize: "0.6rem", padding: "0.3rem 0.7rem", borderRadius: "var(--radius-sm)",
-    cursor: "pointer", userSelect: "none",
+    cursor: "pointer", userSelect: "none", appearance: "none",
     background: active ? "var(--accent-primary-dim)" : "#ffffff08",
     color: active ? "var(--accent-primary)" : "var(--text-muted)",
     border: `1px solid ${active ? "#00e5c830" : "#ffffff10"}`,
@@ -604,7 +604,8 @@ function PromotedComparison({ enabled }: { enabled: boolean }) {
   const wins = filtered.filter((p) => p.promotedGoodput >= p.originalGoodput);
   const losses = filtered.filter((p) => p.promotedGoodput < p.originalGoodput);
   const axisMax = useMemo(() => {
-    const m = Math.max(0, ...filtered.map((p) => Math.max(p.promotedGoodput, p.originalGoodput)));
+    // reduce (not Math.max(...spread)) so any number of points is safe.
+    const m = filtered.reduce((acc, p) => Math.max(acc, p.promotedGoodput, p.originalGoodput), 0);
     return m > 0 ? m * 1.08 : 1; // headroom so parity line + points aren't clipped
   }, [filtered]);
 
@@ -621,7 +622,7 @@ function PromotedComparison({ enabled }: { enabled: boolean }) {
         </div>
         <div style={{ display: "flex", gap: "0.3rem", alignItems: "center", flexWrap: "wrap" }}>
           {COMPARISON_WINDOWS.map((w) => (
-            <div key={w.hours} onClick={() => setHours(w.hours)} style={chip(hours === w.hours)}>{w.label}</div>
+            <button type="button" key={w.hours} onClick={() => setHours(w.hours)} style={chip(hours === w.hours)} aria-pressed={hours === w.hours}>{w.label}</button>
           ))}
         </div>
       </div>
@@ -649,7 +650,7 @@ function PromotedComparison({ enabled }: { enabled: boolean }) {
           </select>
         </div>
         {hasFilters && (
-          <div onClick={() => { setCountry(""); setProtocol(""); setProvider(""); }} style={chip(false)}>Clear</div>
+          <button type="button" onClick={() => { setCountry(""); setProtocol(""); setProvider(""); }} style={chip(false)}>Clear</button>
         )}
       </div>
 
