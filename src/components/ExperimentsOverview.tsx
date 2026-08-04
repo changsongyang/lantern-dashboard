@@ -237,6 +237,52 @@ function GuardrailsCard({ detail }: { detail: ExperimentDetail }) {
   );
 }
 
+// RevalidationCard surfaces the post-promotion re-validation sweep
+// (eng#3719/#3742): only 'promoted' rows ever go through it, so a demoted
+// row's decision/decisionReason already tells that story. The backend records
+// one of the experiment.RevalidationOutcome* tokens (lantern-cloud,
+// SetExperimentRevalidated); rows stamped before the outcome column existed
+// carry no token and fall through to the generic "Concluded".
+const REVALIDATION_OUTCOMES: Record<string, { label: string; color: string; detail: string }> = {
+  held: { label: "Held", color: "#20e070", detail: "Re-measured against the original control; the win held." },
+  control_missing: { label: "Skipped", color: "#8890a0", detail: "Control track no longer live; nothing to measure against." },
+  track_disabled: { label: "Skipped", color: "#8890a0", detail: "Promoted track already disabled; nothing left to demote." },
+  aged_out: { label: "Aged out", color: "#e0a060", detail: "Left the sweep window without any axis ever becoming measurable." },
+};
+
+function classifyOutcome(outcome: string | undefined): { label: string; color: string; detail: string } {
+  // Own-property check: the token comes from the backend, and a plain object
+  // lookup would resolve inherited keys ("toString", "constructor") to junk.
+  if (outcome && Object.prototype.hasOwnProperty.call(REVALIDATION_OUTCOMES, outcome)) return REVALIDATION_OUTCOMES[outcome];
+  // An unknown token means the backend added an outcome this build doesn't
+  // know yet — name it rather than hiding it (this is an operator debugging
+  // surface); no token at all means the row predates the outcome column.
+  if (outcome) return { label: "Concluded", color: "#8890a0", detail: `Unrecognized outcome token: ${outcome}` };
+  return { label: "Concluded", color: "#8890a0", detail: "Concluded before outcomes were recorded." };
+}
+
+function RevalidationCard({ detail }: { detail: ExperimentDetail }) {
+  if (detail.status !== "promoted") return null;
+  const pending = !detail.revalidatedAt;
+  const outcome = pending
+    ? { label: "Pending", color: "#8890a0", detail: "Awaiting the post-promotion re-check." }
+    : classifyOutcome(detail.revalidationOutcome);
+  return (
+    <div style={{ ...card, flex: "1 1 16rem" }}>
+      <div style={sectionLabel}>Re-validation</div>
+      <div style={{ ...mono, fontSize: "1.1rem", fontWeight: 600, color: outcome.color, textTransform: "uppercase" }}>{outcome.label}</div>
+      <div style={{ ...mono, fontSize: "0.62rem", color: "var(--text-secondary)", marginTop: "0.25rem", lineHeight: 1.4 }}>
+        {outcome.detail}
+      </div>
+      {detail.revalidatedAt && (
+        <div style={{ ...mono, fontSize: "0.55rem", color: "var(--text-muted)", marginTop: "0.4rem" }}>
+          Concluded {new Date(detail.revalidatedAt).toLocaleString()}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function GuardrailRow({ name, ok, detail, reason }: { name: string; ok: boolean; detail: string; reason?: string }) {
   const color = ok ? "#20e070" : "#ff4060";
   return (
@@ -471,6 +517,7 @@ function ExperimentDetailPanel({ id, status, onChanged }: { id: number; status: 
       <div style={{ display: "flex", gap: "0.9rem", flexWrap: "wrap" }}>
         <DecisionCard detail={detail} />
         <GuardrailsCard detail={detail} />
+        <RevalidationCard detail={detail} />
       </div>
       <div style={card}>
         <div style={sectionLabel}>Per-country strata — challenger vs control</div>
